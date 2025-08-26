@@ -556,3 +556,54 @@ func (h *AuthHandler) ResendVerificationEmail(c *gin.Context) {
 		"message": "If your email is registered and not yet verified, you will receive a new verification email",
 	})
 }
+
+// DeleteAccount handles user account deletion
+func (h *AuthHandler) DeleteAccount(c *gin.Context) {
+	userID := h.getUserID(c)
+	if userID == 0 {
+		h.handleError(c, errors.ErrUnauthorizedError())
+		return
+	}
+
+	var req models.DeleteAccountRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Warn("Invalid delete account request", "user_id", userID, "error", err.Error())
+		h.handleError(c, errors.NewAppError(errors.ErrValidation, "Invalid request format", http.StatusBadRequest))
+		return
+	}
+
+	err := h.authService.DeleteAccount(userID, &req)
+	if err != nil {
+		h.logger.Error("Account deletion failed", "user_id", userID, "error", err.Error())
+		h.handleError(c, err)
+		return
+	}
+
+	// Clean up all user sessions if session manager is available
+	if h.sessionManager != nil {
+		ctx := c.Request.Context()
+		if sessionErr := h.sessionManager.DeleteUserSessions(ctx, userID); sessionErr != nil {
+			h.logger.Error("Failed to cleanup sessions after account deletion", "user_id", userID, "error", sessionErr.Error())
+			// Don't fail the deletion for this
+		}
+	}
+
+	// Blacklist current token if available
+	authHeader := c.GetHeader("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if h.sessionManager != nil {
+			ctx := c.Request.Context()
+			// Blacklist token for extended period
+			if err := h.sessionManager.BlacklistToken(ctx, token, time.Now().Add(7*24*time.Hour)); err != nil {
+				h.logger.Error("Failed to blacklist token after account deletion", "user_id", userID, "error", err.Error())
+			}
+		}
+	}
+
+	h.logger.Info("Account deleted successfully", "user_id", userID, "reason", req.Reason)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Your account has been successfully deleted. Thank you for using our service.",
+	})
+}

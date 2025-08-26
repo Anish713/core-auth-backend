@@ -84,9 +84,9 @@ func TestSessionManagementIntegration(t *testing.T) {
 	})
 }
 
-// Example of how to use session management in your application
-func ExampleSessionManagement(t *testing.T) {
-	t.Skip("This is an example, not a real test")
+// ExampleAuthHandler_sessionManagement demonstrates how to use session management in your application
+func ExampleAuthHandler_sessionManagement() {
+	// This is an example, not a real test
 
 	// 1. During signin, a session is automatically created
 	signInData := models.SignInRequest{
@@ -143,14 +143,14 @@ func ExampleSessionManagement(t *testing.T) {
 	}
 
 	for _, example := range examples {
-		t.Logf("Example: %s %s", example.method, example.endpoint)
+		// Example: POST /api/v1/auth/signin
+		_ = example.method + " " + example.endpoint
 		if example.body != nil {
 			bodyBytes, _ := json.Marshal(example.body)
-			t.Logf("Body: %s", string(bodyBytes))
+			_ = string(bodyBytes)
 		}
 		for key, value := range example.headers {
-			t.Logf("Header: %s: %s", key, value)
+			_ = key + ": " + value
 		}
-		t.Log("---")
 	}
 }

@@ -112,6 +112,12 @@ type ResendVerificationRequest struct {
 	Email string `json:"email" validate:"required,email"`
 }
 
+// DeleteAccountRequest represents a delete account request
+type DeleteAccountRequest struct {
+	Password string `json:"password" validate:"required"`
+	Reason   string `json:"reason,omitempty" validate:"max=500"`
+}
+
 // AuthResponse represents the authentication response
 type AuthResponse struct {
 	User         UserProfile `json:"user"`

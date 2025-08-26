@@ -227,6 +227,7 @@ func setupRouter(cfg *config.Config, authHandler *handlers.AuthHandler, healthHa
 			protected.GET("/profile", authHandler.GetProfile)
 			protected.PUT("/profile", authHandler.UpdateProfile)
 			protected.POST("/change-password", authHandler.ChangePassword)
+			protected.DELETE("/account", authHandler.DeleteAccount)
 
 			// Authentication endpoints
 			protected.POST("/auth/signout", authHandler.SignOut)

@@ -29,6 +29,7 @@ type AuthService interface {
 	// User profile management
 	GetProfile(userID int64) (*models.UserProfile, error)
 	UpdateProfile(userID int64, req *models.UpdateProfileRequest) (*models.UserProfile, error)
+	DeleteAccount(userID int64, req *models.DeleteAccountRequest) error
 
 	// Token validation
 	ValidateAccessToken(token string) (int64, error)
@@ -701,6 +702,33 @@ func (s *authService) ResendVerificationEmail(req *models.ResendVerificationRequ
 			// Don't return the error to prevent information disclosure
 		}
 	}
+
+	return nil
+}
+
+// DeleteAccount permanently deletes a user account after password verification
+func (s *authService) DeleteAccount(userID int64, req *models.DeleteAccountRequest) error {
+	// Get user
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return errors.ErrUserNotFoundError()
+	}
+
+	// Verify password
+	if err := utils.VerifyPassword(req.Password, user.PasswordHash); err != nil {
+		return errors.NewAppError(errors.ErrValidation, "Invalid password", 400)
+	}
+
+	// Soft delete the account
+	if err := s.userRepo.DeleteAccount(userID); err != nil {
+		return errors.NewErrDatabaseError("failed to delete account")
+	}
+
+	// TODO: In a production system, you might want to:
+	// 1. Send account deletion confirmation email
+	// 2. Log the deletion with reason for audit purposes
+	// 3. Schedule cleanup of associated data after a grace period
+	// 4. Invalidate all active sessions for this user
 
 	return nil
 }

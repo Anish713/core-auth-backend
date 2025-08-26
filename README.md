@@ -259,6 +259,8 @@ GET /ready           # Readiness check (includes DB)
 | `MAX_LOGIN_ATTEMPTS`    | Max failed login attempts                    | `5`              |
 | `ACCOUNT_LOCK_DURATION` | Account lock duration                        | `15m`            |
 | `RATE_LIMIT_RPS`        | Rate limit requests per second               | `10`             |
+| `IP_WHITELIST_ENABLED`  | Enable IP whitelisting                       | `false`          |
+| `ALLOWED_IPS`           | Comma-separated list of allowed IPs/CIDRs    | Empty (all IPs)  |
 
 ### Security Configuration
 
@@ -267,6 +269,7 @@ GET /ready           # Readiness check (includes DB)
 - **Rate Limiting**: Configurable per-IP rate limiting
 - **Account Security**: Automatic locking after failed attempts
 - **CORS**: Configurable allowed origins
+- **IP Whitelisting**: Restrict access to specific IP addresses and CIDR ranges
 
 ## Development
 
@@ -400,6 +403,68 @@ Consider integrating with:
 - Jaeger for distributed tracing
 
 ## Security Considerations
+
+### IP Whitelisting
+
+The service supports IP whitelisting to restrict access to specific IP addresses or ranges. This feature is particularly useful for:
+
+- **Production APIs**: Limit access to known client applications
+- **Admin Endpoints**: Restrict administrative access to office networks
+- **Partner Integrations**: Allow only specific partner IP addresses
+- **Enhanced Security**: Add an additional layer of protection
+
+#### Configuration
+
+Enable IP whitelisting in your `.env` file:
+
+```bash
+# Enable IP whitelisting
+IP_WHITELIST_ENABLED=true
+
+# Allow specific IPs and CIDR ranges (comma-separated)
+ALLOWED_IPS=192.168.1.100,10.0.0.0/8,203.0.113.5,2001:db8::/32
+```
+
+#### Supported Formats
+
+- **Individual IPv4**: `192.168.1.100`
+- **Individual IPv6**: `2001:db8::1`, `::1`
+- **CIDR Ranges**: `192.168.1.0/24`, `10.0.0.0/8`, `2001:db8::/32`
+- **Mixed**: Combine IPv4 and IPv6 addresses in the same list
+
+#### Behavior
+
+- **Disabled**: When `IP_WHITELIST_ENABLED=false` or `ALLOWED_IPS` is empty, all IPs are allowed
+- **Enabled**: Only IPs in the `ALLOWED_IPS` list can access the service
+- **Blocked IPs**: Receive HTTP 403 Forbidden with clear error message
+- **Logging**: All blocked attempts are logged for security monitoring
+- **Proxy Support**: Properly handles `X-Real-IP` and `X-Forwarded-For` headers
+
+#### Production Deployment
+
+For production deployments:
+
+1. **Test First**: Always test IP whitelist rules in staging
+2. **Include Load Balancers**: Don't forget to whitelist your load balancer IPs
+3. **Emergency Access**: Keep at least one admin IP whitelisted
+4. **Monitor Logs**: Watch for legitimate traffic being blocked
+5. **Documentation**: Document all whitelisted IPs and their purposes
+
+#### Common Use Cases
+
+```bash
+# Office network access only
+ALLOWED_IPS=192.168.1.0/24,10.0.0.0/8
+
+# Specific partner integrations
+ALLOWED_IPS=203.0.113.10,198.51.100.20,::1
+
+# Cloud provider ranges (example for AWS)
+ALLOWED_IPS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+
+# Development and production servers
+ALLOWED_IPS=127.0.0.1,::1,192.168.1.100,203.0.113.5
+```
 
 ### Production Checklist
 

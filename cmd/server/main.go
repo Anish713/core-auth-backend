@@ -194,6 +194,13 @@ func setupRouter(cfg *config.Config, authHandler *handlers.AuthHandler, healthHa
 	// Add middleware
 	router.Use(middleware.Logger(log))
 	router.Use(middleware.Recovery(log))
+
+	// Add IP whitelist middleware if enabled
+	if cfg.IPWhitelistEnabled {
+		router.Use(middleware.IPWhitelist(cfg.AllowedIPs, log))
+		log.Info("IP whitelist enabled", "allowed_ips", cfg.AllowedIPs)
+	}
+
 	router.Use(middleware.CORS())
 	router.Use(middleware.SecurityHeaders())
 

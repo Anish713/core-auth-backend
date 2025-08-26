@@ -96,3 +96,6 @@ config.json
 !config.example.yaml
 !config.example.yml
 !config.example.json
+
+# Binaries
+bin/

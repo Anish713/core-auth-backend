@@ -3,6 +3,7 @@ package email
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"html/template"
 	"net/smtp"
@@ -277,6 +278,11 @@ func (s *smtpEmailService) TestConnection() error {
 		return fmt.Errorf("failed to connect to SMTP server: %w", err)
 	}
 	defer client.Close()
+
+	// Start TLS for secure connection (required for Gmail)
+	if err := client.StartTLS(&tls.Config{ServerName: s.config.SMTPHost}); err != nil {
+		return fmt.Errorf("failed to start TLS: %w", err)
+	}
 
 	// Test authentication if credentials are provided
 	if s.config.SMTPUsername != "" && s.config.SMTPPassword != "" {

@@ -17,6 +17,7 @@ type UserRepository interface {
 	GetByEmail(email string) (*models.User, error)
 	Update(user *models.User) error
 	UpdateLastLogin(userID int64) error
+	DeleteAccount(userID int64) error
 
 	// Account security operations
 	UpdateFailedLoginAttempts(userID int64, attempts int) error
@@ -390,6 +391,27 @@ func (r *userRepository) CleanupExpiredEmailVerifications() error {
 	_, err := r.db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to cleanup expired email verifications: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAccount soft deletes a user account by setting is_active to false
+func (r *userRepository) DeleteAccount(userID int64) error {
+	query := `UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND is_active = true`
+
+	result, err := r.db.Exec(query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete account: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("account not found or already deleted")
 	}
 
 	return nil

@@ -113,13 +113,17 @@ func main() {
 
 	// Initialize services with email service
 	authServiceConfig := services.AuthServiceConfig{
-		JWTSecret:        cfg.JWTSecret,
-		AccessExpiry:     cfg.JWTAccessExpiry,
-		RefreshExpiry:    cfg.JWTRefreshExpiry,
-		BCryptCost:       cfg.BCryptCost,
-		MaxLoginAttempts: cfg.MaxLoginAttempts,
-		LockDuration:     cfg.AccountLockDuration,
-		EmailService:     emailService,
+		JWTSecret:                cfg.JWTSecret,
+		AccessExpiry:             cfg.JWTAccessExpiry,
+		RefreshExpiry:            cfg.JWTRefreshExpiry,
+		BCryptCost:               cfg.BCryptCost,
+		MaxLoginAttempts:         cfg.MaxLoginAttempts,
+		LockDuration:             cfg.AccountLockDuration,
+		EmailService:             emailService,
+		EmailVerificationEnabled: cfg.EmailVerificationEnabled,
+		EmailVerificationExpiry:  cfg.EmailVerificationExpiry,
+		SendWelcomeEmail:         cfg.SendWelcomeEmail,
+		SendPasswordChangedEmail: cfg.SendPasswordChangedEmail,
 	}
 
 	authService := services.NewAuthServiceWithConfig(userRepo, authServiceConfig)
@@ -212,6 +216,8 @@ func setupRouter(cfg *config.Config, authHandler *handlers.AuthHandler, healthHa
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
 			auth.POST("/reset-password", authHandler.ResetPassword)
 			auth.POST("/refresh", authHandler.RefreshToken)
+			auth.POST("/verify-email", authHandler.VerifyEmail)
+			auth.POST("/resend-verification", authHandler.ResendVerificationEmail)
 		}
 
 		// Protected routes

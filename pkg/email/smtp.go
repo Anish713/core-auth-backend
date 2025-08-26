@@ -218,6 +218,79 @@ Best regards,
 
 If you have any questions, contact us at {{.SupportEmail}}`,
 	}
+
+	s.templates["email_verification"] = &EmailTemplate{
+		Subject: "Verify Your Email Address - {{.CompanyName}}",
+		HTMLContent: `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; background-color: #007bff; color: white; padding: 20px; border-radius: 8px 8px 0 0; margin: -20px -20px 20px -20px; }
+        .content { padding: 20px 0; }
+        .footer { text-align: center; font-size: 12px; color: #666; border-top: 1px solid #eee; padding-top: 20px; margin-top: 20px; }
+        .button { display: inline-block; background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; font-weight: bold; }
+        .token-box { background-color: #f8f9fa; border: 2px dashed #6c757d; padding: 15px; font-family: monospace; font-size: 16px; text-align: center; margin: 20px 0; word-break: break-all; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; color: #0c5460; padding: 10px; border-radius: 4px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Verify Your Email</h1>
+        </div>
+        <div class="content">
+            <h2>Hello {{.UserName}},</h2>
+            <p>Thank you for signing up with {{.CompanyName}}! To complete your registration and start using your account, please verify your email address.</p>
+            
+            <p>You can verify your email by clicking the button below:</p>
+            <div style="text-align: center;">
+                <a href="{{.VerificationURL}}" class="button">Verify Email Address</a>
+            </div>
+            
+            <p>Or use this verification token:</p>
+            <div class="token-box">{{.VerificationToken}}</div>
+            
+            <div class="info">
+                <strong>Important:</strong> This verification link will expire in 24 hours for security reasons. If you don't verify your email within this time, you may need to request a new verification email.
+            </div>
+            
+            <p>If you're having trouble with the button above, copy and paste the following URL into your web browser:</p>
+            <p style="word-break: break-all; color: #007bff;">{{.VerificationURL}}</p>
+            
+            <p>If you didn't create an account with {{.CompanyName}}, you can safely ignore this email.</p>
+        </div>
+        <div class="footer">
+            <p>Best regards,<br>{{.CompanyName}} Team</p>
+            <p>If you have any questions, contact us at {{.SupportEmail}}</p>
+            <p>This is an automated message, please don't reply to this email.</p>
+        </div>
+    </div>
+</body>
+</html>`,
+		TextContent: `Hello {{.UserName}},
+
+Thank you for signing up with {{.CompanyName}}! To complete your registration and start using your account, please verify your email address.
+
+Verification Token: {{.VerificationToken}}
+
+Verification URL: {{.VerificationURL}}
+
+Important: This verification link will expire in 24 hours for security reasons. If you don't verify your email within this time, you may need to request a new verification email.
+
+If you didn't create an account with {{.CompanyName}}, you can safely ignore this email.
+
+Best regards,
+{{.CompanyName}} Team
+
+If you have any questions, contact us at {{.SupportEmail}}
+This is an automated message, please don't reply to this email.`,
+	}
 }
 
 // SendPasswordResetEmail sends a password reset email
@@ -255,8 +328,7 @@ func (s *smtpEmailService) SendAccountVerificationEmail(ctx context.Context, to,
 		SupportEmail:      s.config.FromEmail,
 	}
 
-	// For now, reuse password reset template structure (you can create a specific one)
-	return s.sendTemplatedEmail(ctx, "welcome", to, data)
+	return s.sendTemplatedEmail(ctx, "email_verification", to, data)
 }
 
 // SendPasswordChangedNotification sends password changed notification

@@ -32,40 +32,56 @@ type AuthService interface {
 
 	// Token validation
 	ValidateAccessToken(token string) (int64, error)
+
+	// Email verification
+	VerifyEmail(req *models.VerifyEmailRequest) error
+	ResendVerificationEmail(req *models.ResendVerificationRequest) error
 }
 
 // authService implements AuthService interface
 type authService struct {
-	userRepo          repository.UserRepository
-	tokenService      *auth.TokenService
-	passwordValidator *utils.PasswordValidator
-	emailService      email.EmailService
-	bcryptCost        int
-	maxLoginAttempts  int
-	lockDuration      time.Duration
+	userRepo                 repository.UserRepository
+	tokenService             *auth.TokenService
+	passwordValidator        *utils.PasswordValidator
+	emailService             email.EmailService
+	bcryptCost               int
+	maxLoginAttempts         int
+	lockDuration             time.Duration
+	emailVerificationEnabled bool
+	emailVerificationExpiry  time.Duration
+	sendWelcomeEmail         bool
+	sendPasswordChangedEmail bool
 }
 
 // AuthServiceConfig contains configuration for the auth service
 type AuthServiceConfig struct {
-	JWTSecret        string
-	AccessExpiry     time.Duration
-	RefreshExpiry    time.Duration
-	BCryptCost       int
-	MaxLoginAttempts int
-	LockDuration     time.Duration
-	EmailService     email.EmailService
+	JWTSecret                string
+	AccessExpiry             time.Duration
+	RefreshExpiry            time.Duration
+	BCryptCost               int
+	MaxLoginAttempts         int
+	LockDuration             time.Duration
+	EmailService             email.EmailService
+	EmailVerificationEnabled bool
+	EmailVerificationExpiry  time.Duration
+	SendWelcomeEmail         bool
+	SendPasswordChangedEmail bool
 }
 
 // NewAuthService creates a new authentication service
 func NewAuthService(userRepo repository.UserRepository, jwtSecret string, emailService email.EmailService) AuthService {
 	return NewAuthServiceWithConfig(userRepo, AuthServiceConfig{
-		JWTSecret:        jwtSecret,
-		AccessExpiry:     15 * time.Minute,
-		RefreshExpiry:    7 * 24 * time.Hour,
-		BCryptCost:       12,
-		MaxLoginAttempts: 5,
-		LockDuration:     15 * time.Minute,
-		EmailService:     emailService,
+		JWTSecret:                jwtSecret,
+		AccessExpiry:             15 * time.Minute,
+		RefreshExpiry:            7 * 24 * time.Hour,
+		BCryptCost:               12,
+		MaxLoginAttempts:         5,
+		LockDuration:             15 * time.Minute,
+		EmailService:             emailService,
+		EmailVerificationEnabled: true,
+		EmailVerificationExpiry:  24 * time.Hour,
+		SendWelcomeEmail:         true,
+		SendPasswordChangedEmail: true,
 	})
 }
 
@@ -75,13 +91,17 @@ func NewAuthServiceWithConfig(userRepo repository.UserRepository, config AuthSer
 	passwordValidator := utils.NewPasswordValidator()
 
 	return &authService{
-		userRepo:          userRepo,
-		tokenService:      tokenService,
-		passwordValidator: passwordValidator,
-		emailService:      config.EmailService,
-		bcryptCost:        config.BCryptCost,
-		maxLoginAttempts:  config.MaxLoginAttempts,
-		lockDuration:      config.LockDuration,
+		userRepo:                 userRepo,
+		tokenService:             tokenService,
+		passwordValidator:        passwordValidator,
+		emailService:             config.EmailService,
+		bcryptCost:               config.BCryptCost,
+		maxLoginAttempts:         config.MaxLoginAttempts,
+		lockDuration:             config.LockDuration,
+		emailVerificationEnabled: config.EmailVerificationEnabled,
+		emailVerificationExpiry:  config.EmailVerificationExpiry,
+		sendWelcomeEmail:         config.SendWelcomeEmail,
+		sendPasswordChangedEmail: config.SendPasswordChangedEmail,
 	}
 }
 
@@ -136,7 +156,7 @@ func (s *authService) SignUp(req *models.SignUpRequest) (*models.AuthResponse, e
 		PasswordHash: passwordHash,
 		FirstName:    req.FirstName,
 		LastName:     req.LastName,
-		IsVerified:   false, // In production, implement email verification
+		IsVerified:   false, // User must verify email
 		IsActive:     true,
 	}
 
@@ -147,29 +167,74 @@ func (s *authService) SignUp(req *models.SignUpRequest) (*models.AuthResponse, e
 		return nil, errors.NewErrDatabaseError("failed to create user")
 	}
 
-	// Generate tokens
-	tokenPair, err := s.tokenService.GenerateTokenPair(user.ID, user.Email)
-	if err != nil {
-		return nil, errors.NewErrInternalError("failed to generate tokens")
-	}
-
-	// Send welcome email
-	if s.emailService != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		if err := s.emailService.SendWelcomeEmail(ctx, user.Email, user.FullName()); err != nil {
-			// Log the error but don't fail the registration
-			fmt.Printf("Failed to send welcome email to %s: %v\n", user.Email, err)
+	// If email verification is enabled, send verification email
+	if s.emailVerificationEnabled {
+		// Generate verification token
+		token, err := utils.GenerateEmailVerificationToken()
+		if err != nil {
+			return nil, errors.NewErrInternalError("failed to generate verification token")
 		}
-	}
 
-	return &models.AuthResponse{
-		User:         user.ToProfile(),
-		AccessToken:  tokenPair.AccessToken,
-		RefreshToken: tokenPair.RefreshToken,
-		ExpiresIn:    tokenPair.ExpiresIn,
-	}, nil
+		// Create email verification record
+		emailVerification := &models.EmailVerification{
+			UserID:    user.ID,
+			Token:     token,
+			ExpiresAt: time.Now().Add(s.emailVerificationExpiry),
+		}
+
+		if err := s.userRepo.CreateEmailVerification(emailVerification); err != nil {
+			return nil, errors.NewErrDatabaseError("failed to create email verification")
+		}
+
+		// Send verification email
+		if s.emailService != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := s.emailService.SendAccountVerificationEmail(ctx, user.Email, token, user.FullName()); err != nil {
+				// Log the error but don't fail the registration
+				fmt.Printf("Failed to send verification email to %s: %v\n", user.Email, err)
+			}
+		}
+
+		// Return success response without tokens - user must verify email first
+		return &models.AuthResponse{
+			User:         user.ToProfile(),
+			AccessToken:  "", // No token until email verified
+			RefreshToken: "", // No token until email verified
+			ExpiresIn:    0,  // No expiry since no token
+		}, nil
+	} else {
+		// Email verification disabled - mark as verified and generate tokens
+		user.IsVerified = true
+		if err := s.userRepo.Update(user); err != nil {
+			return nil, errors.NewErrDatabaseError("failed to update user verification status")
+		}
+
+		// Generate tokens
+		tokenPair, err := s.tokenService.GenerateTokenPair(user.ID, user.Email)
+		if err != nil {
+			return nil, errors.NewErrInternalError("failed to generate tokens")
+		}
+
+		// Send welcome email if enabled
+		if s.emailService != nil && s.sendWelcomeEmail {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			if err := s.emailService.SendWelcomeEmail(ctx, user.Email, user.FullName()); err != nil {
+				// Log the error but don't fail the registration
+				fmt.Printf("Failed to send welcome email to %s: %v\n", user.Email, err)
+			}
+		}
+
+		return &models.AuthResponse{
+			User:         user.ToProfile(),
+			AccessToken:  tokenPair.AccessToken,
+			RefreshToken: tokenPair.RefreshToken,
+			ExpiresIn:    tokenPair.ExpiresIn,
+		}, nil
+	}
 }
 
 // SignIn authenticates a user and returns tokens
@@ -202,6 +267,12 @@ func (s *authService) SignIn(req *models.SignInRequest, ipAddress, userAgent str
 	if !user.IsActive {
 		s.userRepo.RecordLoginAttempt(loginAttempt)
 		return nil, errors.ErrAccountInactiveError()
+	}
+
+	// Check email verification if enabled
+	if s.emailVerificationEnabled && !user.IsVerified {
+		s.userRepo.RecordLoginAttempt(loginAttempt)
+		return nil, errors.NewAppError(errors.ErrValidation, "Please verify your email address before signing in", 403)
 	}
 
 	// Check if account is locked
@@ -394,8 +465,8 @@ func (s *authService) ResetPassword(req *models.ResetPasswordRequest) error {
 		fmt.Printf("Failed to unlock account after password reset: %v\n", err)
 	}
 
-	// Send password changed notification
-	if s.emailService != nil {
+	// Send password changed notification if enabled
+	if s.emailService != nil && s.sendPasswordChangedEmail {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -445,8 +516,8 @@ func (s *authService) ChangePassword(userID int64, req *models.ChangePasswordReq
 		return errors.NewErrDatabaseError("failed to update password")
 	}
 
-	// Send password changed notification
-	if s.emailService != nil {
+	// Send password changed notification if enabled
+	if s.emailService != nil && s.sendPasswordChangedEmail {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
@@ -522,4 +593,114 @@ func (s *authService) ValidateAccessToken(token string) (int64, error) {
 	}
 
 	return userID, nil
+}
+
+// VerifyEmail verifies user email using verification token
+func (s *authService) VerifyEmail(req *models.VerifyEmailRequest) error {
+	// Get email verification record
+	verification, err := s.userRepo.GetEmailVerification(req.Token)
+	if err != nil {
+		return errors.NewAppError(errors.ErrValidation, "Invalid or expired verification token", 400)
+	}
+
+	// Get user
+	user, err := s.userRepo.GetByID(verification.UserID)
+	if err != nil {
+		return errors.ErrUserNotFoundError()
+	}
+
+	// Check if already verified
+	if user.IsVerified {
+		return errors.NewAppError(errors.ErrValidation, "Email already verified", 400)
+	}
+
+	// Mark user as verified
+	user.IsVerified = true
+	if err := s.userRepo.Update(user); err != nil {
+		return errors.NewErrDatabaseError("failed to update user verification status")
+	}
+
+	// Mark verification token as used
+	if err := s.userRepo.MarkEmailVerificationUsed(req.Token); err != nil {
+		// Log error but don't fail the operation
+		fmt.Printf("Failed to mark email verification token as used: %v\n", err)
+	}
+
+	// Send welcome email if enabled and configured
+	if s.emailService != nil && s.sendWelcomeEmail {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := s.emailService.SendWelcomeEmail(ctx, user.Email, user.FullName()); err != nil {
+			// Log the error but don't fail the request
+			fmt.Printf("Failed to send welcome email to %s: %v\n", user.Email, err)
+		}
+	}
+
+	return nil
+}
+
+// ResendVerificationEmail resends verification email to user
+func (s *authService) ResendVerificationEmail(req *models.ResendVerificationRequest) error {
+	// Sanitize input
+	req.Email = strings.ToLower(utils.SanitizeInput(req.Email))
+
+	// Validate email format
+	if err := utils.ValidateEmail(req.Email); err != nil {
+		return errors.ErrInvalidEmailError()
+	}
+
+	// Get user by email
+	user, err := s.userRepo.GetByEmail(req.Email)
+	if err != nil {
+		// Don't reveal if user exists for security
+		return nil
+	}
+
+	// Check if user is already verified
+	if user.IsVerified {
+		return errors.NewAppError(errors.ErrValidation, "Email already verified", 400)
+	}
+
+	// Check if user is active
+	if !user.IsActive {
+		// Don't reveal account status for security
+		return nil
+	}
+
+	// Check if email verification is enabled
+	if !s.emailVerificationEnabled {
+		return errors.NewAppError(errors.ErrValidation, "Email verification is not enabled", 400)
+	}
+
+	// Generate verification token
+	token, err := utils.GenerateEmailVerificationToken()
+	if err != nil {
+		return errors.NewErrInternalError("failed to generate verification token")
+	}
+
+	// Create email verification record
+	emailVerification := &models.EmailVerification{
+		UserID:    user.ID,
+		Token:     token,
+		ExpiresAt: time.Now().Add(s.emailVerificationExpiry),
+	}
+
+	if err := s.userRepo.CreateEmailVerification(emailVerification); err != nil {
+		return errors.NewErrDatabaseError("failed to create email verification")
+	}
+
+	// Send verification email
+	if s.emailService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := s.emailService.SendAccountVerificationEmail(ctx, user.Email, token, user.FullName()); err != nil {
+			// Log the error but don't fail the request
+			fmt.Printf("Failed to send verification email to %s: %v\n", user.Email, err)
+			// Don't return the error to prevent information disclosure
+		}
+	}
+
+	return nil
 }

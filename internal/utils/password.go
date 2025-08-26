@@ -168,6 +168,11 @@ func GeneratePasswordResetToken() (string, error) {
 	return GenerateRandomToken(32) // 64 character hex string
 }
 
+// GenerateEmailVerificationToken generates a secure token for email verification
+func GenerateEmailVerificationToken() (string, error) {
+	return GenerateRandomToken(32) // 64 character hex string
+}
+
 // Helper functions for password validation
 
 func containsUpper(s string) bool {

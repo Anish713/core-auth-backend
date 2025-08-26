@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"auth-service/internal/repository"
 	"auth-service/internal/utils"
 	"auth-service/pkg/auth"
+	"auth-service/pkg/email"
 	"auth-service/pkg/errors"
 )
 
@@ -37,6 +39,7 @@ type authService struct {
 	userRepo          repository.UserRepository
 	tokenService      *auth.TokenService
 	passwordValidator *utils.PasswordValidator
+	emailService      email.EmailService
 	bcryptCost        int
 	maxLoginAttempts  int
 	lockDuration      time.Duration
@@ -50,10 +53,11 @@ type AuthServiceConfig struct {
 	BCryptCost       int
 	MaxLoginAttempts int
 	LockDuration     time.Duration
+	EmailService     email.EmailService
 }
 
 // NewAuthService creates a new authentication service
-func NewAuthService(userRepo repository.UserRepository, jwtSecret string) AuthService {
+func NewAuthService(userRepo repository.UserRepository, jwtSecret string, emailService email.EmailService) AuthService {
 	return NewAuthServiceWithConfig(userRepo, AuthServiceConfig{
 		JWTSecret:        jwtSecret,
 		AccessExpiry:     15 * time.Minute,
@@ -61,6 +65,7 @@ func NewAuthService(userRepo repository.UserRepository, jwtSecret string) AuthSe
 		BCryptCost:       12,
 		MaxLoginAttempts: 5,
 		LockDuration:     15 * time.Minute,
+		EmailService:     emailService,
 	})
 }
 
@@ -73,6 +78,7 @@ func NewAuthServiceWithConfig(userRepo repository.UserRepository, config AuthSer
 		userRepo:          userRepo,
 		tokenService:      tokenService,
 		passwordValidator: passwordValidator,
+		emailService:      config.EmailService,
 		bcryptCost:        config.BCryptCost,
 		maxLoginAttempts:  config.MaxLoginAttempts,
 		lockDuration:      config.LockDuration,
@@ -145,6 +151,17 @@ func (s *authService) SignUp(req *models.SignUpRequest) (*models.AuthResponse, e
 	tokenPair, err := s.tokenService.GenerateTokenPair(user.ID, user.Email)
 	if err != nil {
 		return nil, errors.NewErrInternalError("failed to generate tokens")
+	}
+
+	// Send welcome email
+	if s.emailService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := s.emailService.SendWelcomeEmail(ctx, user.Email, user.FullName()); err != nil {
+			// Log the error but don't fail the registration
+			fmt.Printf("Failed to send welcome email to %s: %v\n", user.Email, err)
+		}
 	}
 
 	return &models.AuthResponse{
@@ -284,6 +301,13 @@ func (s *authService) ForgotPassword(req *models.ForgotPasswordRequest) error {
 	user, err := s.userRepo.GetByEmail(req.Email)
 	if err != nil {
 		// Don't reveal if email exists or not for security
+		// But we still return nil to prevent email enumeration attacks
+		return nil
+	}
+
+	// Check if user is active
+	if !user.IsActive {
+		// Don't reveal account status for security
 		return nil
 	}
 
@@ -304,8 +328,19 @@ func (s *authService) ForgotPassword(req *models.ForgotPasswordRequest) error {
 		return errors.NewErrDatabaseError("failed to create password reset")
 	}
 
-	// TODO: Send email with reset token (implement email service)
-	// For now, just return success
+	// Send password reset email
+	if s.emailService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := s.emailService.SendPasswordResetEmail(ctx, user.Email, token, user.FullName()); err != nil {
+			// Log the error but don't fail the request
+			// In production, you might want to use a proper logger here
+			fmt.Printf("Failed to send password reset email to %s: %v\n", user.Email, err)
+			// Don't return the error to prevent information disclosure
+		}
+	}
+
 	return nil
 }
 
@@ -350,11 +385,24 @@ func (s *authService) ResetPassword(req *models.ResetPasswordRequest) error {
 	// Mark reset token as used
 	if err := s.userRepo.MarkPasswordResetUsed(req.Token); err != nil {
 		// Log error but don't fail the operation
+		fmt.Printf("Failed to mark password reset token as used: %v\n", err)
 	}
 
 	// Reset failed login attempts and unlock account
 	if err := s.userRepo.UnlockAccount(user.ID); err != nil {
 		// Log error but don't fail the operation
+		fmt.Printf("Failed to unlock account after password reset: %v\n", err)
+	}
+
+	// Send password changed notification
+	if s.emailService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := s.emailService.SendPasswordChangedNotification(ctx, user.Email, user.FullName()); err != nil {
+			// Log the error but don't fail the request
+			fmt.Printf("Failed to send password changed notification to %s: %v\n", user.Email, err)
+		}
 	}
 
 	return nil
@@ -395,6 +443,17 @@ func (s *authService) ChangePassword(userID int64, req *models.ChangePasswordReq
 	user.PasswordHash = passwordHash
 	if err := s.userRepo.Update(user); err != nil {
 		return errors.NewErrDatabaseError("failed to update password")
+	}
+
+	// Send password changed notification
+	if s.emailService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if err := s.emailService.SendPasswordChangedNotification(ctx, user.Email, user.FullName()); err != nil {
+			// Log the error but don't fail the request
+			fmt.Printf("Failed to send password changed notification to %s: %v\n", user.Email, err)
+		}
 	}
 
 	return nil

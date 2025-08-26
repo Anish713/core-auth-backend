@@ -140,10 +140,10 @@ func (r *userRepository) GetByEmail(email string) (*models.User, error) {
 func (r *userRepository) Update(user *models.User) error {
 	query := `
 		UPDATE users 
-		SET first_name = $1, last_name = $2, is_verified = $3, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $4`
+		SET first_name = $1, last_name = $2, password_hash = $3, is_verified = $4, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $5`
 
-	result, err := r.db.Exec(query, user.FirstName, user.LastName, user.IsVerified, user.ID)
+	result, err := r.db.Exec(query, user.FirstName, user.LastName, user.PasswordHash, user.IsVerified, user.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}

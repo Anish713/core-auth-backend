@@ -109,6 +109,42 @@ func (c *Config) validate() error {
 		return fmt.Errorf("REDIS_URL is required when Redis is enabled")
 	}
 
+	// Validate email configuration for production
+	if c.IsProduction() {
+		if c.SMTPHost == "" {
+			return fmt.Errorf("SMTP_HOST is required in production environment")
+		}
+		if c.SMTPPort == 0 {
+			return fmt.Errorf("SMTP_PORT is required in production environment")
+		}
+		if c.SMTPUsername == "" {
+			return fmt.Errorf("SMTP_USERNAME is required in production environment")
+		}
+		if c.SMTPPassword == "" {
+			return fmt.Errorf("SMTP_PASSWORD is required in production environment")
+		}
+		if c.FromEmail == "" {
+			return fmt.Errorf("FROM_EMAIL is required in production environment")
+		}
+		// Basic email format validation
+		if !strings.Contains(c.FromEmail, "@") || !strings.Contains(c.FromEmail, ".") {
+			return fmt.Errorf("FROM_EMAIL must be a valid email address")
+		}
+	}
+
+	// Validate SMTP port range
+	if c.SMTPPort != 0 && (c.SMTPPort < 1 || c.SMTPPort > 65535) {
+		return fmt.Errorf("SMTP_PORT must be between 1 and 65535")
+	}
+
+	// Validate password reset expiry
+	if c.PasswordResetExpiry < time.Minute {
+		return fmt.Errorf("PASSWORD_RESET_EXPIRY must be at least 1 minute")
+	}
+	if c.PasswordResetExpiry > 24*time.Hour {
+		return fmt.Errorf("PASSWORD_RESET_EXPIRY must not exceed 24 hours")
+	}
+
 	return nil
 }
 
@@ -120,6 +156,22 @@ func (c *Config) IsDevelopment() bool {
 // IsProduction returns true if the environment is production
 func (c *Config) IsProduction() bool {
 	return c.Environment == "production"
+}
+
+// IsEmailEnabled returns true if email configuration is present
+func (c *Config) IsEmailEnabled() bool {
+	return c.SMTPHost != "" && c.SMTPPort != 0 && c.FromEmail != ""
+}
+
+// GetEmailConfig returns email configuration
+func (c *Config) GetEmailConfig() map[string]interface{} {
+	return map[string]interface{}{
+		"smtp_host":     c.SMTPHost,
+		"smtp_port":     c.SMTPPort,
+		"smtp_username": c.SMTPUsername,
+		"from_email":    c.FromEmail,
+		"enabled":       c.IsEmailEnabled(),
+	}
 }
 
 // Helper functions for environment variable parsing

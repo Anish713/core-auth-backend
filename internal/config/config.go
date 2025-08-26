@@ -51,6 +51,10 @@ type Config struct {
 	// Email notification configuration
 	SendWelcomeEmail         bool `json:"send_welcome_email"`
 	SendPasswordChangedEmail bool `json:"send_password_changed_email"`
+
+	// IP Whitelist configuration
+	IPWhitelistEnabled bool     `json:"ip_whitelist_enabled"`
+	AllowedIPs         []string `json:"allowed_ips"`
 }
 
 // Load loads configuration from environment variables
@@ -86,6 +90,10 @@ func Load() (*Config, error) {
 		// Email notification configuration
 		SendWelcomeEmail:         getBoolEnv("SEND_WELCOME_EMAIL", true),
 		SendPasswordChangedEmail: getBoolEnv("SEND_PASSWORD_CHANGED_EMAIL", true),
+
+		// IP Whitelist configuration
+		IPWhitelistEnabled: getBoolEnv("IP_WHITELIST_ENABLED", false),
+		AllowedIPs:         getStringSliceEnv("ALLOWED_IPS", []string{}),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -230,6 +238,25 @@ func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
 		if parsed, err := time.ParseDuration(value); err == nil {
 			return parsed
 		}
+	}
+	return defaultValue
+}
+
+func getStringSliceEnv(key string, defaultValue []string) []string {
+	if value := os.Getenv(key); value != "" {
+		// Split by comma and trim whitespace
+		slice := strings.Split(value, ",")
+		for i, v := range slice {
+			slice[i] = strings.TrimSpace(v)
+		}
+		// Filter out empty strings
+		var result []string
+		for _, v := range slice {
+			if v != "" {
+				result = append(result, v)
+			}
+		}
+		return result
 	}
 	return defaultValue
 }

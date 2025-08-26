@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -264,4 +265,123 @@ func Timeout(timeout time.Duration) gin.HandlerFunc {
 		c.Request = c.Request.WithContext(ctx)
 		c.Next()
 	}
+}
+
+// IPWhitelist middleware restricts access to allowed IP addresses
+func IPWhitelist(allowedIPs []string, log logger.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// If no IPs are configured, allow all traffic
+		if len(allowedIPs) == 0 {
+			c.Next()
+			return
+		}
+
+		clientIP := getClientIP(c)
+
+		// Check if client IP is in the allowed list
+		allowed := false
+		for _, allowedIP := range allowedIPs {
+			if isIPAllowed(clientIP, allowedIP) {
+				allowed = true
+				break
+			}
+		}
+
+		if !allowed {
+			log.Warn("IP access denied",
+				"client_ip", clientIP,
+				"allowed_ips", strings.Join(allowedIPs, ", "),
+				"method", c.Request.Method,
+				"path", c.Request.URL.Path,
+			)
+
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"error": gin.H{
+					"code":    "IP_BLOCKED",
+					"message": "Access denied: Your IP address is not allowed",
+				},
+			})
+			c.Abort()
+			return
+		}
+
+		// Log successful IP access for security monitoring
+		log.Debug("IP access granted",
+			"client_ip", clientIP,
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+		)
+
+		c.Next()
+	}
+}
+
+// getClientIP extracts the real client IP considering proxies and load balancers
+func getClientIP(c *gin.Context) string {
+	// Priority order for IP detection:
+	// 1. X-Real-IP header (nginx proxy)
+	// 2. X-Forwarded-For header (load balancers, proxies)
+	// 3. RemoteAddr (direct connection)
+
+	// Check X-Real-IP header first
+	if realIP := c.GetHeader("X-Real-IP"); realIP != "" {
+		return realIP
+	}
+
+	// Check X-Forwarded-For header
+	if forwardedFor := c.GetHeader("X-Forwarded-For"); forwardedFor != "" {
+		// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+		// The first IP is usually the original client
+		ips := strings.Split(forwardedFor, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+
+	// Fallback to RemoteAddr
+	remoteAddr := c.Request.RemoteAddr
+
+	// Try to split host and port
+	ip, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// If SplitHostPort fails, RemoteAddr might not have a port
+		// or it might be an IPv6 address without proper brackets
+		// Just return the RemoteAddr as-is and let IP parsing handle it later
+		return remoteAddr
+	}
+	return ip
+}
+
+// isIPAllowed checks if a client IP is allowed by comparing against an allowed IP/CIDR
+func isIPAllowed(clientIP, allowedIP string) bool {
+	// Direct IP match
+	if clientIP == allowedIP {
+		return true
+	}
+
+	// Check if allowedIP is a CIDR range
+	if strings.Contains(allowedIP, "/") {
+		_, cidr, err := net.ParseCIDR(allowedIP)
+		if err != nil {
+			return false
+		}
+
+		ip := net.ParseIP(clientIP)
+		if ip == nil {
+			return false
+		}
+
+		return cidr.Contains(ip)
+	}
+
+	// If allowedIP is just an IP without CIDR, parse and compare
+	allowedIPParsed := net.ParseIP(allowedIP)
+	clientIPParsed := net.ParseIP(clientIP)
+
+	if allowedIPParsed == nil || clientIPParsed == nil {
+		return false
+	}
+
+	return allowedIPParsed.Equal(clientIPParsed)
 }

@@ -35,6 +35,11 @@ const (
 	// Password reset
 	ErrResetTokenExpired ErrorCode = "RESET_TOKEN_EXPIRED"
 	ErrResetTokenInvalid ErrorCode = "RESET_TOKEN_INVALID"
+
+	// Session and resource errors
+	ErrNotFound       ErrorCode = "NOT_FOUND"
+	ErrForbidden      ErrorCode = "FORBIDDEN"
+	ErrNotImplemented ErrorCode = "NOT_IMPLEMENTED"
 )
 
 // AppError represents a structured application error
@@ -161,6 +166,21 @@ func ErrResetTokenExpiredError() *AppError {
 
 func ErrResetTokenInvalidError() *AppError {
 	return NewAppError(ErrResetTokenInvalid, "Invalid password reset token", http.StatusBadRequest)
+}
+
+// Resource errors
+func ErrNotFoundError(message string) *AppError {
+	if message == "" {
+		message = "Resource not found"
+	}
+	return NewAppError(ErrNotFound, message, http.StatusNotFound)
+}
+
+func ErrForbiddenError(message string) *AppError {
+	if message == "" {
+		message = "Access forbidden"
+	}
+	return NewAppError(ErrForbidden, message, http.StatusForbidden)
 }
 
 // IsAppError checks if an error is an AppError

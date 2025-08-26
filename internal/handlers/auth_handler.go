@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"auth-service/internal/models"
 	"auth-service/internal/services"
@@ -15,15 +16,17 @@ import (
 
 // AuthHandler handles authentication-related HTTP requests
 type AuthHandler struct {
-	authService services.AuthService
-	logger      logger.Logger
+	authService    services.AuthService
+	sessionManager services.SessionManager
+	logger         logger.Logger
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(authService services.AuthService, logger logger.Logger) *AuthHandler {
+func NewAuthHandler(authService services.AuthService, sessionManager services.SessionManager, logger logger.Logger) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		logger:      logger,
+		authService:    authService,
+		sessionManager: sessionManager,
+		logger:         logger,
 	}
 }
 
@@ -71,6 +74,29 @@ func (h *AuthHandler) SignIn(c *gin.Context) {
 		return
 	}
 
+	// Create session if session manager is available
+	if h.sessionManager != nil {
+		h.logger.Info("Session manager available, creating session", "user_id", response.User.ID)
+		ctx := c.Request.Context()
+		sessionMetadata := map[string]interface{}{
+			"ip_address": ipAddress,
+			"user_agent": userAgent,
+			"login_time": response.User.CreatedAt,
+		}
+
+		session, sessionErr := h.sessionManager.CreateSession(ctx, response.User.ID, response.User.Email, sessionMetadata)
+		if sessionErr != nil {
+			h.logger.Error("Failed to create session", "user_id", response.User.ID, "error", sessionErr.Error())
+			// Don't fail the login, just log the error
+		} else {
+			h.logger.Info("Session created successfully", "user_id", response.User.ID, "session_id", session.ID)
+			// Add session ID to response headers for client tracking
+			c.Header("X-Session-ID", session.ID)
+		}
+	} else {
+		h.logger.Warn("Session manager not available - Redis may not be connected")
+	}
+
 	h.logger.Info("User signed in successfully", "user_id", response.User.ID, "email", response.User.Email, "ip", ipAddress)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -100,6 +126,51 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		"success": true,
 		"message": "Token refreshed successfully",
 		"data":    response,
+	})
+}
+
+// SignOut handles user sign out and session cleanup
+func (h *AuthHandler) SignOut(c *gin.Context) {
+	userID := h.getUserID(c)
+	if userID == 0 {
+		h.handleError(c, errors.ErrUnauthorizedError())
+		return
+	}
+
+	// Get session ID from header or query param
+	sessionID := c.GetHeader("X-Session-ID")
+	if sessionID == "" {
+		sessionID = c.Query("session_id")
+	}
+
+	// Clean up session if session manager is available
+	if h.sessionManager != nil && sessionID != "" {
+		ctx := c.Request.Context()
+		if err := h.sessionManager.DeleteSession(ctx, sessionID); err != nil {
+			h.logger.Error("Failed to delete session", "user_id", userID, "session_id", sessionID, "error", err.Error())
+		} else {
+			h.logger.Info("Session deleted", "user_id", userID, "session_id", sessionID)
+		}
+	}
+
+	// Add token to blacklist using session manager
+	// Extract token from Authorization header
+	authHeader := c.GetHeader("Authorization")
+	if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if h.sessionManager != nil {
+			ctx := c.Request.Context()
+			// Blacklist token for remaining validity period (e.g., 24 hours)
+			if err := h.sessionManager.BlacklistToken(ctx, token, time.Now().Add(24*time.Hour)); err != nil {
+				h.logger.Error("Failed to blacklist token", "user_id", userID, "error", err.Error())
+			}
+		}
+	}
+
+	h.logger.Info("User signed out successfully", "user_id", userID)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Signed out successfully",
 	})
 }
 
@@ -228,6 +299,124 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 		"success": true,
 		"message": "Profile updated successfully",
 		"data":    profile,
+	})
+}
+
+// GetActiveSessions returns active sessions for the current user
+func (h *AuthHandler) GetActiveSessions(c *gin.Context) {
+	userID := h.getUserID(c)
+	if userID == 0 {
+		h.handleError(c, errors.ErrUnauthorizedError())
+		return
+	}
+
+	if h.sessionManager == nil {
+		h.handleError(c, errors.NewAppError(errors.ErrNotImplemented, "Session management not available", http.StatusNotImplemented))
+		return
+	}
+
+	ctx := c.Request.Context()
+	sessions, err := h.sessionManager.GetUserSessions(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to get user sessions", "user_id", userID, "error", err.Error())
+		h.handleError(c, errors.NewErrInternalError("Failed to retrieve sessions"))
+		return
+	}
+
+	h.logger.Debug("Sessions retrieved", "user_id", userID, "count", len(sessions))
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"sessions": sessions,
+			"count":    len(sessions),
+		},
+	})
+}
+
+// TerminateSession terminates a specific session
+func (h *AuthHandler) TerminateSession(c *gin.Context) {
+	userID := h.getUserID(c)
+	if userID == 0 {
+		h.handleError(c, errors.ErrUnauthorizedError())
+		return
+	}
+
+	if h.sessionManager == nil {
+		h.handleError(c, errors.NewAppError(errors.ErrNotImplemented, "Session management not available", http.StatusNotImplemented))
+		return
+	}
+
+	sessionID := c.Param("sessionId")
+	if sessionID == "" {
+		h.handleError(c, errors.NewAppError(errors.ErrValidation, "Session ID is required", http.StatusBadRequest))
+		return
+	}
+
+	ctx := c.Request.Context()
+	// Verify the session belongs to the user
+	session, err := h.sessionManager.GetSession(ctx, sessionID)
+	if err != nil {
+		h.logger.Error("Session not found", "session_id", sessionID, "user_id", userID, "error", err.Error())
+		h.handleError(c, errors.ErrNotFoundError("Session not found"))
+		return
+	}
+
+	if session.UserID != userID {
+		h.logger.Warn("Unauthorized session termination attempt", "session_id", sessionID, "session_user_id", session.UserID, "requesting_user_id", userID)
+		h.handleError(c, errors.ErrForbiddenError("Not authorized to terminate this session"))
+		return
+	}
+
+	if err := h.sessionManager.DeleteSession(ctx, sessionID); err != nil {
+		h.logger.Error("Failed to terminate session", "session_id", sessionID, "user_id", userID, "error", err.Error())
+		h.handleError(c, errors.NewErrInternalError("Failed to terminate session"))
+		return
+	}
+
+	h.logger.Info("Session terminated", "session_id", sessionID, "user_id", userID)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Session terminated successfully",
+	})
+}
+
+// TerminateAllSessions terminates all sessions for the current user except the current one
+func (h *AuthHandler) TerminateAllSessions(c *gin.Context) {
+	userID := h.getUserID(c)
+	if userID == 0 {
+		h.handleError(c, errors.ErrUnauthorizedError())
+		return
+	}
+
+	if h.sessionManager == nil {
+		h.handleError(c, errors.NewAppError(errors.ErrNotImplemented, "Session management not available", http.StatusNotImplemented))
+		return
+	}
+
+	// Get current session ID to preserve it
+	currentSessionID := c.GetHeader("X-Session-ID")
+
+	ctx := c.Request.Context()
+	var err error
+
+	if currentSessionID != "" {
+		// Terminate all sessions except the current one
+		err = h.sessionManager.DeleteAllUserSessionsExcept(ctx, userID, currentSessionID)
+	} else {
+		// Terminate all sessions if no current session ID
+		err = h.sessionManager.DeleteUserSessions(ctx, userID)
+	}
+
+	if err != nil {
+		h.logger.Error("Failed to terminate user sessions", "user_id", userID, "error", err.Error())
+		h.handleError(c, errors.NewErrInternalError("Failed to terminate sessions"))
+		return
+	}
+
+	h.logger.Info("All user sessions terminated", "user_id", userID, "preserved_session", currentSessionID)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "All sessions terminated successfully",
 	})
 }
 

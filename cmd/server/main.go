@@ -14,7 +14,10 @@ import (
 	"auth-service/internal/middleware"
 	"auth-service/internal/repository"
 	"auth-service/internal/services"
+	"auth-service/pkg/cache"
 	"auth-service/pkg/logger"
+	"auth-service/pkg/ratelimit"
+	"auth-service/pkg/redis"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -45,18 +48,69 @@ func main() {
 		log.Fatal("Failed to run migrations", "error", err)
 	}
 
+	// Initialize Redis client (optional, fallback to in-memory if Redis is disabled)
+	var redisClient *redis.Client
+	var cacheService cache.CacheService
+	var sessionService cache.SessionService
+	var rateLimiter ratelimit.RateLimiter
+
+	if cfg.RedisEnabled {
+		redisConfig := &redis.Config{
+			URL:      cfg.RedisURL,
+			Password: cfg.RedisPassword,
+			DB:       cfg.RedisDB,
+		}
+
+		redisClient, err = redis.NewClient(redisConfig)
+		if err != nil {
+			log.Error("Failed to connect to Redis, falling back to in-memory cache", "error", err)
+			// Could implement in-memory fallbacks here
+			redisClient = nil
+		} else {
+			log.Info("Connected to Redis successfully")
+			cacheService = cache.NewRedisCache(redisClient)
+			sessionService = cache.NewRedisSessionService(redisClient)
+
+			// Initialize Redis-based rate limiter
+			rateLimitConfig := &ratelimit.Config{
+				Limit:      cfg.RateLimitRPS,
+				Window:     time.Minute,
+				Identifier: "api",
+			}
+			rateLimiter = ratelimit.NewRedisRateLimiter(redisClient, rateLimitConfig)
+		}
+	}
+
+	// Ensure Redis client is closed on shutdown
+	if redisClient != nil {
+		defer redisClient.Close()
+	}
+
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo, cfg.JWTSecret)
 
+	// Initialize session manager if Redis is available
+	var sessionManager services.SessionManager
+	if sessionService != nil && cacheService != nil {
+		sessionManagerConfig := &services.SessionManagerConfig{
+			DefaultTTL:  cfg.JWTAccessExpiry,
+			MaxSessions: 5, // Maximum sessions per user
+		}
+		sessionManager = services.NewSessionManager(sessionService, cacheService, sessionManagerConfig)
+		log.Info("Session manager initialized")
+	} else {
+		log.Warn("Session manager not available - Redis not enabled or failed to connect")
+	}
+
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(authService, log)
-	healthHandler := handlers.NewHealthHandler(db)
+	authHandler := handlers.NewAuthHandler(authService, sessionManager, log)
+	healthHandler := handlers.NewHealthHandler(db, redisClient)
 
 	// Setup router
-	router := setupRouter(cfg, authHandler, healthHandler, log)
+	router := setupRouter(cfg, authHandler, healthHandler, rateLimiter, log)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -93,7 +147,7 @@ func main() {
 	log.Info("Server exited")
 }
 
-func setupRouter(cfg *config.Config, authHandler *handlers.AuthHandler, healthHandler *handlers.HealthHandler, log logger.Logger) *gin.Engine {
+func setupRouter(cfg *config.Config, authHandler *handlers.AuthHandler, healthHandler *handlers.HealthHandler, rateLimiter ratelimit.RateLimiter, log logger.Logger) *gin.Engine {
 	// Set gin mode based on environment
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -106,6 +160,11 @@ func setupRouter(cfg *config.Config, authHandler *handlers.AuthHandler, healthHa
 	router.Use(middleware.Recovery(log))
 	router.Use(middleware.CORS())
 	router.Use(middleware.SecurityHeaders())
+
+	// Add rate limiting middleware if rate limiter is available
+	if cfg.RateLimitEnabled && rateLimiter != nil {
+		router.Use(middleware.RateLimit(rateLimiter))
+	}
 
 	// Health check endpoints
 	router.GET("/health", healthHandler.Health)
@@ -130,6 +189,14 @@ func setupRouter(cfg *config.Config, authHandler *handlers.AuthHandler, healthHa
 			protected.GET("/profile", authHandler.GetProfile)
 			protected.PUT("/profile", authHandler.UpdateProfile)
 			protected.POST("/change-password", authHandler.ChangePassword)
+
+			// Authentication endpoints
+			protected.POST("/auth/signout", authHandler.SignOut)
+
+			// Session management endpoints
+			protected.GET("/sessions", authHandler.GetActiveSessions)
+			protected.DELETE("/sessions/:sessionId", authHandler.TerminateSession)
+			protected.DELETE("/sessions", authHandler.TerminateAllSessions)
 		}
 	}
 

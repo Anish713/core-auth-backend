@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: auth_service_postgres_dev
+    environment:
+      POSTGRES_DB: auth_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - auth_network_dev
+
+  # Redis (for session storage, rate limiting, etc.)
+  redis:
+    image: redis:7-alpine
+    container_name: auth_service_redis_dev
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_dev:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - auth_network_dev
+
+volumes:
+  postgres_data_dev:
+    driver: local
+  redis_data_dev:
+    driver: local
+
+networks:
+  auth_network_dev:
+    driver: bridge

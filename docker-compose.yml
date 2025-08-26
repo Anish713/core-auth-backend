@@ -1,0 +1,114 @@
+version: "3.8"
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: auth_service_postgres
+    environment:
+      POSTGRES_DB: auth_service
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - auth_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_service"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (for session storage, rate limiting, etc.)
+  redis:
+    image: redis:7-alpine
+    container_name: auth_service_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - auth_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Auth Service Application
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: auth_service_app
+    environment:
+      PORT: 8080
+      ENV: development
+      DATABASE_URL: postgres://postgres:password@postgres:5432/auth_service?sslmode=disable
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production-make-it-at-least-32-characters-long
+      JWT_ACCESS_EXPIRY: 15m
+      JWT_REFRESH_EXPIRY: 168h
+      BCRYPT_COST: 12
+      PASSWORD_RESET_EXPIRY: 1h
+      MAX_LOGIN_ATTEMPTS: 5
+      ACCOUNT_LOCK_DURATION: 15m
+      RATE_LIMIT_ENABLED: true
+      RATE_LIMIT_RPS: 10
+    ports:
+      - "8080:8080"
+    networks:
+      - auth_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # pgAdmin (Database Management UI)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: auth_service_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    networks:
+      - auth_network
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  auth_network:
+    driver: bridge

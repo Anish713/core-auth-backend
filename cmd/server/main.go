@@ -17,9 +17,13 @@ import (
 	"auth-service/pkg/logger"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file
+	_ = godotenv.Load()
+
 	// Initialize logger
 	log := logger.New()
 

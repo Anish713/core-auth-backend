@@ -1,5 +1,37 @@
 package main
 
+// @title Authentication Service API
+// @version 1.0
+// @description A comprehensive authentication service with user management, session handling, and email verification
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url http://www.swagger.io/support
+// @contact.email support@swagger.io
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8080
+// @BasePath /
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
+
+// @tag.name Authentication
+// @tag.description Authentication related endpoints
+
+// @tag.name User Profile
+// @tag.description User profile management endpoints
+
+// @tag.name Session Management
+// @tag.description Session management endpoints
+
+// @tag.name Health Check
+// @tag.description Health and readiness check endpoints
+
 import (
 	"context"
 	"net/http"
@@ -22,6 +54,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	_ "auth-service/docs"
 )
 
 func main() {
@@ -205,6 +241,12 @@ func setupRouter(cfg *config.Config, authHandler *handlers.AuthHandler, healthHa
 	// Health check endpoints
 	router.GET("/health", healthHandler.Health)
 	router.GET("/ready", healthHandler.Ready)
+
+	// Swagger documentation
+	if cfg.Environment != "production" {
+		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		log.Info("Swagger UI available at /swagger/index.html")
+	}
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")

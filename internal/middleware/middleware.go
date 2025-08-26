@@ -105,8 +105,13 @@ func SecurityHeaders() gin.HandlerFunc {
 		// Strict Transport Security (HTTPS only)
 		c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
-		// Content Security Policy
-		c.Header("Content-Security-Policy", "default-src 'self'")
+		// Content Security Policy - relaxed for Swagger UI
+		if strings.HasPrefix(c.Request.URL.Path, "/swagger") {
+			// More permissive CSP for Swagger UI
+			c.Header("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:")
+		} else {
+			c.Header("Content-Security-Policy", "default-src 'self'")
+		}
 
 		// Referrer Policy
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")

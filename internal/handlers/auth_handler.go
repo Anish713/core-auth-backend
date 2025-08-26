@@ -31,6 +31,17 @@ func NewAuthHandler(authService services.AuthService, sessionManager services.Se
 }
 
 // SignUp handles user registration
+// @Summary Register a new user
+// @Description Register a new user with email, password, first name, and last name
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body models.SignUpRequest true "User registration data"
+// @Success 201 {object} models.AuthSuccessResponse "User registered successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or validation errors"
+// @Failure 409 {object} models.ErrorResponse "Email already exists"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/signup [post]
 func (h *AuthHandler) SignUp(c *gin.Context) {
 	var req models.SignUpRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -55,6 +66,19 @@ func (h *AuthHandler) SignUp(c *gin.Context) {
 }
 
 // SignIn handles user authentication
+// @Summary Authenticate user
+// @Description Authenticate user with email and password, returns access and refresh tokens
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body models.SignInRequest true "User login credentials"
+// @Success 200 {object} models.AuthSuccessResponse "Sign in successful"
+// @Header 200 {string} X-Session-ID "Session ID for tracking user session"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or validation errors"
+// @Failure 401 {object} models.ErrorResponse "Invalid credentials"
+// @Failure 423 {object} models.ErrorResponse "Account locked due to too many failed attempts"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/signin [post]
 func (h *AuthHandler) SignIn(c *gin.Context) {
 	var req models.SignInRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -106,6 +130,17 @@ func (h *AuthHandler) SignIn(c *gin.Context) {
 }
 
 // RefreshToken handles token refresh
+// @Summary Refresh access token
+// @Description Refresh an access token using a valid refresh token
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body models.RefreshTokenRequest true "Refresh token data"
+// @Success 200 {object} models.AuthSuccessResponse "Token refreshed successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format"
+// @Failure 401 {object} models.ErrorResponse "Invalid or expired refresh token"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/refresh [post]
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req models.RefreshTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -130,6 +165,17 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 }
 
 // SignOut handles user sign out and session cleanup
+// @Summary Sign out user
+// @Description Sign out the authenticated user and invalidate current session
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param X-Session-ID header string false "Session ID to terminate"
+// @Success 200 {object} models.SuccessResponse "Signed out successfully"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized - invalid or missing token"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/signout [post]
 func (h *AuthHandler) SignOut(c *gin.Context) {
 	userID := h.getUserID(c)
 	if userID == 0 {
@@ -175,6 +221,16 @@ func (h *AuthHandler) SignOut(c *gin.Context) {
 }
 
 // ForgotPassword handles password reset requests
+// @Summary Request password reset
+// @Description Send password reset email to the specified address
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body models.ForgotPasswordRequest true "Email address for password reset"
+// @Success 200 {object} models.SuccessResponse "Password reset email sent (always returns success to prevent email enumeration)"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or email"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/forgot-password [post]
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	var req models.ForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -199,6 +255,17 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 }
 
 // ResetPassword handles password reset
+// @Summary Reset password using token
+// @Description Reset user password using a valid reset token received via email
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body models.ResetPasswordRequest true "Reset token and new password"
+// @Success 200 {object} models.SuccessResponse "Password reset successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or validation errors"
+// @Failure 404 {object} models.ErrorResponse "Invalid or expired reset token"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/reset-password [post]
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req models.ResetPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -222,6 +289,19 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 }
 
 // ChangePassword handles password change requests
+// @Summary Change user password
+// @Description Change the authenticated user's password
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.ChangePasswordRequest true "Current and new password"
+// @Success 200 {object} models.SuccessResponse "Password changed successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or validation errors"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized - invalid or missing token"
+// @Failure 403 {object} models.ErrorResponse "Current password is incorrect"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/change-password [post]
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	userID := h.getUserID(c)
 	if userID == 0 {
@@ -251,6 +331,17 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 }
 
 // GetProfile handles get user profile requests
+// @Summary Get user profile
+// @Description Get the authenticated user's profile information
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} models.ProfileSuccessResponse "Profile retrieved successfully"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized - invalid or missing token"
+// @Failure 404 {object} models.ErrorResponse "User not found"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/profile [get]
 func (h *AuthHandler) GetProfile(c *gin.Context) {
 	userID := h.getUserID(c)
 	if userID == 0 {
@@ -273,6 +364,19 @@ func (h *AuthHandler) GetProfile(c *gin.Context) {
 }
 
 // UpdateProfile handles update user profile requests
+// @Summary Update user profile
+// @Description Update the authenticated user's profile information
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.UpdateProfileRequest true "Updated profile information"
+// @Success 200 {object} models.ProfileSuccessResponse "Profile updated successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or validation errors"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized - invalid or missing token"
+// @Failure 404 {object} models.ErrorResponse "User not found"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/profile [put]
 func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	userID := h.getUserID(c)
 	if userID == 0 {
@@ -303,6 +407,17 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 }
 
 // GetActiveSessions returns active sessions for the current user
+// @Summary Get active sessions
+// @Description Get all active sessions for the authenticated user
+// @Tags Session Management
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} models.SessionsSuccessResponse "Sessions retrieved successfully"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized - invalid or missing token"
+// @Failure 501 {object} models.ErrorResponse "Session management not available"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/sessions [get]
 func (h *AuthHandler) GetActiveSessions(c *gin.Context) {
 	userID := h.getUserID(c)
 	if userID == 0 {
@@ -334,6 +449,21 @@ func (h *AuthHandler) GetActiveSessions(c *gin.Context) {
 }
 
 // TerminateSession terminates a specific session
+// @Summary Terminate specific session
+// @Description Terminate a specific session by session ID
+// @Tags Session Management
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param sessionId path string true "Session ID to terminate"
+// @Success 200 {object} models.SuccessResponse "Session terminated successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid session ID"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized - invalid or missing token"
+// @Failure 403 {object} models.ErrorResponse "Not authorized to terminate this session"
+// @Failure 404 {object} models.ErrorResponse "Session not found"
+// @Failure 501 {object} models.ErrorResponse "Session management not available"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/sessions/{sessionId} [delete]
 func (h *AuthHandler) TerminateSession(c *gin.Context) {
 	userID := h.getUserID(c)
 	if userID == 0 {
@@ -381,6 +511,18 @@ func (h *AuthHandler) TerminateSession(c *gin.Context) {
 }
 
 // TerminateAllSessions terminates all sessions for the current user except the current one
+// @Summary Terminate all sessions
+// @Description Terminate all sessions for the authenticated user except the current one
+// @Tags Session Management
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param X-Session-ID header string false "Current session ID to preserve"
+// @Success 200 {object} models.SuccessResponse "All sessions terminated successfully"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized - invalid or missing token"
+// @Failure 501 {object} models.ErrorResponse "Session management not available"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/sessions [delete]
 func (h *AuthHandler) TerminateAllSessions(c *gin.Context) {
 	userID := h.getUserID(c)
 	if userID == 0 {
@@ -511,6 +653,17 @@ func (h *AuthHandler) getClientIP(c *gin.Context) string {
 }
 
 // VerifyEmail handles email verification
+// @Summary Verify email address
+// @Description Verify user email address using verification token received via email
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body models.VerifyEmailRequest true "Email verification token"
+// @Success 200 {object} models.SuccessResponse "Email verified successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or validation errors"
+// @Failure 404 {object} models.ErrorResponse "Invalid or expired verification token"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/verify-email [post]
 func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 	var req models.VerifyEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -534,6 +687,16 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 }
 
 // ResendVerificationEmail handles resending verification email
+// @Summary Resend email verification
+// @Description Resend verification email to the specified address
+// @Tags Authentication
+// @Accept json
+// @Produce json
+// @Param request body models.ResendVerificationRequest true "Email address for resending verification"
+// @Success 200 {object} models.SuccessResponse "Verification email resent (always returns success to prevent email enumeration)"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or email"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/resend-verification [post]
 func (h *AuthHandler) ResendVerificationEmail(c *gin.Context) {
 	var req models.ResendVerificationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -558,6 +721,19 @@ func (h *AuthHandler) ResendVerificationEmail(c *gin.Context) {
 }
 
 // DeleteAccount handles user account deletion
+// @Summary Delete user account
+// @Description Permanently delete the authenticated user's account
+// @Tags User Profile
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.DeleteAccountRequest true "Password confirmation and optional reason"
+// @Success 200 {object} models.SuccessResponse "Account deleted successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid request format or validation errors"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized - invalid or missing token"
+// @Failure 403 {object} models.ErrorResponse "Incorrect password"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/account [delete]
 func (h *AuthHandler) DeleteAccount(c *gin.Context) {
 	userID := h.getUserID(c)
 	if userID == 0 {

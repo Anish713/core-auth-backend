@@ -35,6 +35,13 @@ type HealthStatus struct {
 }
 
 // Health handles basic health check requests
+// @Summary Basic health check
+// @Description Returns basic health status of the service
+// @Tags Health Check
+// @Accept json
+// @Produce json
+// @Success 200 {object} models.HealthResponse "Service is healthy"
+// @Router /health [get]
 func (h *HealthHandler) Health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":    "ok",
@@ -44,6 +51,14 @@ func (h *HealthHandler) Health(c *gin.Context) {
 }
 
 // Ready handles readiness probe requests (includes database and Redis connectivity)
+// @Summary Readiness check
+// @Description Returns readiness status including database and Redis connectivity
+// @Tags Health Check
+// @Accept json
+// @Produce json
+// @Success 200 {object} models.ReadinessResponse "Service is ready"
+// @Failure 503 {object} models.ReadinessResponse "Service is not ready"
+// @Router /ready [get]
 func (h *HealthHandler) Ready(c *gin.Context) {
 	status := HealthStatus{
 		Status:    "ok",

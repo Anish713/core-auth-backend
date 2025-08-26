@@ -1,0 +1,875 @@
+basePath: /
+definitions:
+  models.APIError:
+    properties:
+      code:
+        example: validation_error
+        type: string
+      details:
+        example: Email format is invalid
+        type: string
+      message:
+        example: Invalid input provided
+        type: string
+    type: object
+  models.AuthResponse:
+    properties:
+      access_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      expires_in:
+        description: seconds
+        example: 900
+        type: integer
+      refresh_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      user:
+        $ref: '#/definitions/models.UserProfile'
+    type: object
+  models.AuthSuccessResponse:
+    properties:
+      data:
+        $ref: '#/definitions/models.AuthResponse'
+      message:
+        example: Sign in successful
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  models.ChangePasswordRequest:
+    properties:
+      current_password:
+        example: CurrentPassword123!
+        type: string
+      new_password:
+        example: NewPassword123!
+        maxLength: 128
+        minLength: 8
+        type: string
+    required:
+    - current_password
+    - new_password
+    type: object
+  models.DeleteAccountRequest:
+    properties:
+      password:
+        example: CurrentPassword123!
+        type: string
+      reason:
+        example: No longer need the service
+        maxLength: 500
+        type: string
+    required:
+    - password
+    type: object
+  models.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/models.APIError'
+      success:
+        example: false
+        type: boolean
+    type: object
+  models.ForgotPasswordRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+    required:
+    - email
+    type: object
+  models.HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+      timestamp:
+        example: "2024-01-15T10:30:00Z"
+        type: string
+      uptime:
+        example: 1h23m45s
+        type: string
+    type: object
+  models.ProfileSuccessResponse:
+    properties:
+      data:
+        $ref: '#/definitions/models.UserProfile'
+      success:
+        example: true
+        type: boolean
+    type: object
+  models.ReadinessResponse:
+    properties:
+      checks:
+        additionalProperties: true
+        type: object
+      status:
+        example: ok
+        type: string
+      timestamp:
+        example: "2024-01-15T10:30:00Z"
+        type: string
+      uptime:
+        example: 1h23m45s
+        type: string
+    type: object
+  models.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    required:
+    - refresh_token
+    type: object
+  models.ResendVerificationRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+    required:
+    - email
+    type: object
+  models.ResetPasswordRequest:
+    properties:
+      password:
+        example: NewSecurePassword123!
+        maxLength: 128
+        minLength: 8
+        type: string
+      token:
+        example: 64-character-reset-token-here
+        type: string
+    required:
+    - password
+    - token
+    type: object
+  models.SessionInfo:
+    properties:
+      created_at:
+        example: "2024-01-15T10:30:00Z"
+        type: string
+      id:
+        example: session_123
+        type: string
+      ip_address:
+        example: 192.168.1.1
+        type: string
+      is_current:
+        example: true
+        type: boolean
+      last_seen:
+        example: "2024-01-15T14:30:00Z"
+        type: string
+      user_agent:
+        example: Mozilla/5.0...
+        type: string
+      user_id:
+        example: 1
+        type: integer
+    type: object
+  models.SessionsData:
+    properties:
+      sessions:
+        items:
+          $ref: '#/definitions/models.SessionInfo'
+        type: array
+    type: object
+  models.SessionsSuccessResponse:
+    properties:
+      data:
+        $ref: '#/definitions/models.SessionsData'
+      success:
+        example: true
+        type: boolean
+    type: object
+  models.SignInRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: SecurePassword123!
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  models.SignUpRequest:
+    properties:
+      email:
+        example: user@example.com
+        maxLength: 255
+        type: string
+      first_name:
+        example: John
+        maxLength: 100
+        minLength: 1
+        type: string
+      last_name:
+        example: Doe
+        maxLength: 100
+        minLength: 1
+        type: string
+      password:
+        example: SecurePassword123!
+        maxLength: 128
+        minLength: 8
+        type: string
+    required:
+    - email
+    - first_name
+    - last_name
+    - password
+    type: object
+  models.SuccessResponse:
+    properties:
+      message:
+        example: Operation completed successfully
+        type: string
+      success:
+        example: true
+        type: boolean
+    type: object
+  models.UpdateProfileRequest:
+    properties:
+      first_name:
+        example: John
+        maxLength: 100
+        minLength: 1
+        type: string
+      last_name:
+        example: Smith
+        maxLength: 100
+        minLength: 1
+        type: string
+    required:
+    - first_name
+    - last_name
+    type: object
+  models.UserProfile:
+    properties:
+      created_at:
+        example: "2024-01-15T10:30:00Z"
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      first_name:
+        example: John
+        type: string
+      id:
+        example: 1
+        type: integer
+      is_verified:
+        example: true
+        type: boolean
+      last_name:
+        example: Doe
+        type: string
+    type: object
+  models.VerifyEmailRequest:
+    properties:
+      token:
+        example: 64-character-verification-token-here
+        type: string
+    required:
+    - token
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: A comprehensive authentication service with user management, session
+    handling, and email verification
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Authentication Service API
+  version: "1.0"
+paths:
+  /api/v1/account:
+    delete:
+      consumes:
+      - application/json
+      description: Permanently delete the authenticated user's account
+      parameters:
+      - description: Password confirmation and optional reason
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.DeleteAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Account deleted successfully
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "400":
+          description: Invalid request format or validation errors
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Incorrect password
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete user account
+      tags:
+      - User Profile
+  /api/v1/auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Send password reset email to the specified address
+      parameters:
+      - description: Email address for password reset
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password reset email sent (always returns success to prevent
+            email enumeration)
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "400":
+          description: Invalid request format or email
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Request password reset
+      tags:
+      - Authentication
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refresh an access token using a valid refresh token
+      parameters:
+      - description: Refresh token data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token refreshed successfully
+          schema:
+            $ref: '#/definitions/models.AuthSuccessResponse'
+        "400":
+          description: Invalid request format
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Invalid or expired refresh token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Refresh access token
+      tags:
+      - Authentication
+  /api/v1/auth/resend-verification:
+    post:
+      consumes:
+      - application/json
+      description: Resend verification email to the specified address
+      parameters:
+      - description: Email address for resending verification
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ResendVerificationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Verification email resent (always returns success to prevent
+            email enumeration)
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "400":
+          description: Invalid request format or email
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Resend email verification
+      tags:
+      - Authentication
+  /api/v1/auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Reset user password using a valid reset token received via email
+      parameters:
+      - description: Reset token and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password reset successfully
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "400":
+          description: Invalid request format or validation errors
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Invalid or expired reset token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Reset password using token
+      tags:
+      - Authentication
+  /api/v1/auth/signin:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user with email and password, returns access and refresh
+        tokens
+      parameters:
+      - description: User login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SignInRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sign in successful
+          headers:
+            X-Session-ID:
+              description: Session ID for tracking user session
+              type: string
+          schema:
+            $ref: '#/definitions/models.AuthSuccessResponse'
+        "400":
+          description: Invalid request format or validation errors
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "423":
+          description: Account locked due to too many failed attempts
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Authenticate user
+      tags:
+      - Authentication
+  /api/v1/auth/signout:
+    post:
+      consumes:
+      - application/json
+      description: Sign out the authenticated user and invalidate current session
+      parameters:
+      - description: Session ID to terminate
+        in: header
+        name: X-Session-ID
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Signed out successfully
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Sign out user
+      tags:
+      - Authentication
+  /api/v1/auth/signup:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user with email, password, first name, and last
+        name
+      parameters:
+      - description: User registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SignUpRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User registered successfully
+          schema:
+            $ref: '#/definitions/models.AuthSuccessResponse'
+        "400":
+          description: Invalid request format or validation errors
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "409":
+          description: Email already exists
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Register a new user
+      tags:
+      - Authentication
+  /api/v1/auth/verify-email:
+    post:
+      consumes:
+      - application/json
+      description: Verify user email address using verification token received via
+        email
+      parameters:
+      - description: Email verification token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.VerifyEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Email verified successfully
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "400":
+          description: Invalid request format or validation errors
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Invalid or expired verification token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Verify email address
+      tags:
+      - Authentication
+  /api/v1/change-password:
+    post:
+      consumes:
+      - application/json
+      description: Change the authenticated user's password
+      parameters:
+      - description: Current and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password changed successfully
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "400":
+          description: Invalid request format or validation errors
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Current password is incorrect
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Change user password
+      tags:
+      - User Profile
+  /api/v1/profile:
+    get:
+      consumes:
+      - application/json
+      description: Get the authenticated user's profile information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Profile retrieved successfully
+          schema:
+            $ref: '#/definitions/models.ProfileSuccessResponse'
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - User Profile
+    put:
+      consumes:
+      - application/json
+      description: Update the authenticated user's profile information
+      parameters:
+      - description: Updated profile information
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Profile updated successfully
+          schema:
+            $ref: '#/definitions/models.ProfileSuccessResponse'
+        "400":
+          description: Invalid request format or validation errors
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - User Profile
+  /api/v1/sessions:
+    delete:
+      consumes:
+      - application/json
+      description: Terminate all sessions for the authenticated user except the current
+        one
+      parameters:
+      - description: Current session ID to preserve
+        in: header
+        name: X-Session-ID
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: All sessions terminated successfully
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "501":
+          description: Session management not available
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Terminate all sessions
+      tags:
+      - Session Management
+    get:
+      consumes:
+      - application/json
+      description: Get all active sessions for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sessions retrieved successfully
+          schema:
+            $ref: '#/definitions/models.SessionsSuccessResponse'
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "501":
+          description: Session management not available
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get active sessions
+      tags:
+      - Session Management
+  /api/v1/sessions/{sessionId}:
+    delete:
+      consumes:
+      - application/json
+      description: Terminate a specific session by session ID
+      parameters:
+      - description: Session ID to terminate
+        in: path
+        name: sessionId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Session terminated successfully
+          schema:
+            $ref: '#/definitions/models.SuccessResponse'
+        "400":
+          description: Invalid session ID
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized - invalid or missing token
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Not authorized to terminate this session
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "501":
+          description: Session management not available
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Terminate specific session
+      tags:
+      - Session Management
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Returns basic health status of the service
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service is healthy
+          schema:
+            $ref: '#/definitions/models.HealthResponse'
+      summary: Basic health check
+      tags:
+      - Health Check
+  /ready:
+    get:
+      consumes:
+      - application/json
+      description: Returns readiness status including database and Redis connectivity
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service is ready
+          schema:
+            $ref: '#/definitions/models.ReadinessResponse'
+        "503":
+          description: Service is not ready
+          schema:
+            $ref: '#/definitions/models.ReadinessResponse'
+      summary: Readiness check
+      tags:
+      - Health Check
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
+tags:
+- description: Authentication related endpoints
+  name: Authentication
+- description: User profile management endpoints
+  name: User Profile
+- description: Session management endpoints
+  name: Session Management
+- description: Health and readiness check endpoints
+  name: Health Check

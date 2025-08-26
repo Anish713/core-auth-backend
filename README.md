@@ -173,6 +173,28 @@ Content-Type: application/json
 }
 ```
 
+#### Verify Email
+
+```http
+POST /auth/verify-email
+Content-Type: application/json
+
+{
+  "token": "verification-token-from-email"
+}
+```
+
+#### Resend Verification Email
+
+```http
+POST /auth/resend-verification
+Content-Type: application/json
+
+{
+  "email": "user@example.com"
+}
+```
+
 ### Protected Endpoints
 
 All protected endpoints require the `Authorization` header:
@@ -431,7 +453,7 @@ For support and questions:
 
 ## Roadmap
 
-- [ ] Email verification system
+- [x] Email verification system
 - [ ] OAuth2 integration (Google, GitHub, etc.)
 - [ ] Two-factor authentication (2FA)
 - [ ] Role-based access control (RBAC)

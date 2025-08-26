@@ -509,3 +509,50 @@ func (h *AuthHandler) getClientIP(c *gin.Context) string {
 	// Fall back to RemoteAddr
 	return c.ClientIP()
 }
+
+// VerifyEmail handles email verification
+func (h *AuthHandler) VerifyEmail(c *gin.Context) {
+	var req models.VerifyEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Warn("Invalid verify email request", "error", err.Error())
+		h.handleError(c, errors.NewAppError(errors.ErrValidation, "Invalid request format", http.StatusBadRequest))
+		return
+	}
+
+	err := h.authService.VerifyEmail(&req)
+	if err != nil {
+		h.logger.Error("Email verification failed", "token", req.Token, "error", err.Error())
+		h.handleError(c, err)
+		return
+	}
+
+	h.logger.Info("Email verified successfully", "token", req.Token)
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Email verified successfully. You can now sign in to your account.",
+	})
+}
+
+// ResendVerificationEmail handles resending verification email
+func (h *AuthHandler) ResendVerificationEmail(c *gin.Context) {
+	var req models.ResendVerificationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Warn("Invalid resend verification request", "error", err.Error())
+		h.handleError(c, errors.NewAppError(errors.ErrValidation, "Invalid request format", http.StatusBadRequest))
+		return
+	}
+
+	err := h.authService.ResendVerificationEmail(&req)
+	if err != nil {
+		h.logger.Error("Resend verification failed", "email", req.Email, "error", err.Error())
+		h.handleError(c, err)
+		return
+	}
+
+	h.logger.Info("Verification email resent", "email", req.Email)
+	// Always return success to prevent email enumeration
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "If your email is registered and not yet verified, you will receive a new verification email",
+	})
+}

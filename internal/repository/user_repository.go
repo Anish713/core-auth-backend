@@ -32,6 +32,12 @@ type UserRepository interface {
 	// Login attempt tracking
 	RecordLoginAttempt(attempt *models.LoginAttempt) error
 	GetFailedLoginAttemptsCount(email string, since time.Time) (int, error)
+
+	// Email verification operations
+	CreateEmailVerification(verification *models.EmailVerification) error
+	GetEmailVerification(token string) (*models.EmailVerification, error)
+	MarkEmailVerificationUsed(token string) error
+	CleanupExpiredEmailVerifications() error
 }
 
 // userRepository implements UserRepository
@@ -315,4 +321,76 @@ func (r *userRepository) GetFailedLoginAttemptsCount(email string, since time.Ti
 	}
 
 	return count, nil
+}
+
+// CreateEmailVerification creates an email verification record
+func (r *userRepository) CreateEmailVerification(verification *models.EmailVerification) error {
+	query := `
+		INSERT INTO email_verifications (user_id, token, expires_at)
+		VALUES ($1, $2, $3)
+		RETURNING id, created_at`
+
+	err := r.db.QueryRow(
+		query,
+		verification.UserID,
+		verification.Token,
+		verification.ExpiresAt,
+	).Scan(&verification.ID, &verification.CreatedAt)
+
+	if err != nil {
+		return fmt.Errorf("failed to create email verification: %w", err)
+	}
+
+	return nil
+}
+
+// GetEmailVerification retrieves an email verification by token
+func (r *userRepository) GetEmailVerification(token string) (*models.EmailVerification, error) {
+	verification := &models.EmailVerification{}
+	query := `
+		SELECT id, user_id, token, expires_at, used, created_at
+		FROM email_verifications
+		WHERE token = $1 AND used = false AND expires_at > CURRENT_TIMESTAMP`
+
+	err := r.db.QueryRow(query, token).Scan(
+		&verification.ID,
+		&verification.UserID,
+		&verification.Token,
+		&verification.ExpiresAt,
+		&verification.Used,
+		&verification.CreatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("email verification token not found or expired")
+		}
+		return nil, fmt.Errorf("failed to get email verification: %w", err)
+	}
+
+	return verification, nil
+}
+
+// MarkEmailVerificationUsed marks an email verification as used
+func (r *userRepository) MarkEmailVerificationUsed(token string) error {
+	query := `UPDATE email_verifications SET used = true WHERE token = $1`
+
+	_, err := r.db.Exec(query, token)
+	if err != nil {
+		return fmt.Errorf("failed to mark email verification as used: %w", err)
+	}
+
+	return nil
+}
+
+// CleanupExpiredEmailVerifications removes expired email verification records
+func (r *userRepository) CleanupExpiredEmailVerifications() error {
+	query := `DELETE FROM email_verifications WHERE expires_at < CURRENT_TIMESTAMP`
+
+	_, err := r.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup expired email verifications: %w", err)
+	}
+
+	return nil
 }

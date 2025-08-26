@@ -50,6 +50,16 @@ type LoginAttempt struct {
 	AttemptedAt time.Time `json:"attempted_at" db:"attempted_at"`
 }
 
+// EmailVerification represents an email verification request
+type EmailVerification struct {
+	ID        int64     `json:"id" db:"id"`
+	UserID    int64     `json:"user_id" db:"user_id"`
+	Token     string    `json:"token" db:"token"`
+	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
+	Used      bool      `json:"used" db:"used"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
+
 // SignUpRequest represents a sign up request
 type SignUpRequest struct {
 	Email     string `json:"email" validate:"required,email,max=255"`
@@ -90,6 +100,16 @@ type UpdateProfileRequest struct {
 // RefreshTokenRequest represents a refresh token request
 type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
+// VerifyEmailRequest represents an email verification request
+type VerifyEmailRequest struct {
+	Token string `json:"token" validate:"required"`
+}
+
+// ResendVerificationRequest represents a resend verification email request
+type ResendVerificationRequest struct {
+	Email string `json:"email" validate:"required,email"`
 }
 
 // AuthResponse represents the authentication response

@@ -43,6 +43,14 @@ type Config struct {
 	RedisPassword string `json:"redis_password"`
 	RedisDB       int    `json:"redis_db"`
 	RedisEnabled  bool   `json:"redis_enabled"`
+
+	// Email verification configuration
+	EmailVerificationEnabled bool          `json:"email_verification_enabled"`
+	EmailVerificationExpiry  time.Duration `json:"email_verification_expiry"`
+
+	// Email notification configuration
+	SendWelcomeEmail         bool `json:"send_welcome_email"`
+	SendPasswordChangedEmail bool `json:"send_password_changed_email"`
 }
 
 // Load loads configuration from environment variables
@@ -70,6 +78,14 @@ func Load() (*Config, error) {
 		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
 		RedisDB:             getIntEnv("REDIS_DB", 0),
 		RedisEnabled:        getBoolEnv("REDIS_ENABLED", true),
+
+		// Email verification configuration
+		EmailVerificationEnabled: getBoolEnv("EMAIL_VERIFICATION_ENABLED", true),
+		EmailVerificationExpiry:  getDurationEnv("EMAIL_VERIFICATION_EXPIRY", 24*time.Hour),
+
+		// Email notification configuration
+		SendWelcomeEmail:         getBoolEnv("SEND_WELCOME_EMAIL", true),
+		SendPasswordChangedEmail: getBoolEnv("SEND_PASSWORD_CHANGED_EMAIL", true),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -143,6 +159,14 @@ func (c *Config) validate() error {
 	}
 	if c.PasswordResetExpiry > 24*time.Hour {
 		return fmt.Errorf("PASSWORD_RESET_EXPIRY must not exceed 24 hours")
+	}
+
+	// Validate email verification expiry
+	if c.EmailVerificationExpiry < time.Hour {
+		return fmt.Errorf("EMAIL_VERIFICATION_EXPIRY must be at least 1 hour")
+	}
+	if c.EmailVerificationExpiry > 7*24*time.Hour {
+		return fmt.Errorf("EMAIL_VERIFICATION_EXPIRY must not exceed 7 days")
 	}
 
 	return nil

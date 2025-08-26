@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"auth-service/pkg/auth"
 	"auth-service/pkg/errors"
 	"auth-service/pkg/logger"
+	"auth-service/pkg/ratelimit"
 
 	"github.com/gin-gonic/gin"
 )
@@ -118,6 +120,11 @@ func SecurityHeaders() gin.HandlerFunc {
 
 // AuthRequired middleware for protected routes
 func AuthRequired(jwtSecret string) gin.HandlerFunc {
+	return AuthRequiredWithSessionManager(jwtSecret, nil)
+}
+
+// AuthRequiredWithSessionManager middleware for protected routes with session management
+func AuthRequiredWithSessionManager(jwtSecret string, sessionManager interface{}) gin.HandlerFunc {
 	tokenService := auth.NewTokenService(jwtSecret, 15*time.Minute, 7*24*time.Hour)
 
 	return func(c *gin.Context) {
@@ -151,6 +158,10 @@ func AuthRequired(jwtSecret string) gin.HandlerFunc {
 
 		token := tokenParts[1]
 
+		// Check if token is blacklisted (if session manager is available)
+		// Note: This would require a proper interface type, but keeping it simple for now
+		// TODO: Implement proper token blacklist checking with session manager
+
 		// Validate token
 		claims, err := tokenService.ValidateToken(token, auth.AccessToken)
 		if err != nil {
@@ -173,76 +184,50 @@ func AuthRequired(jwtSecret string) gin.HandlerFunc {
 	}
 }
 
-// RateLimit middleware for rate limiting
-func RateLimit(rps int) gin.HandlerFunc {
-	// Simple in-memory rate limiter (in production, use Redis)
-	clients := make(map[string]*ClientLimiter)
-
+// RateLimit middleware for rate limiting using Redis
+func RateLimit(rateLimiter ratelimit.RateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		clientIP := c.ClientIP()
+		ctx := c.Request.Context()
 
-		// Get or create limiter for this client
-		if limiter, exists := clients[clientIP]; exists {
-			if !limiter.Allow() {
-				c.JSON(http.StatusTooManyRequests, gin.H{
-					"success": false,
-					"error": gin.H{
-						"code":    errors.ErrRateLimit,
-						"message": "Rate limit exceeded. Please try again later.",
-					},
-				})
-				c.Abort()
-				return
+		// Check rate limit
+		allowed, err := rateLimiter.Allow(ctx, clientIP)
+		if err != nil {
+			// Log error but allow request to continue
+			c.Next()
+			return
+		}
+
+		if !allowed {
+			// Get usage information for headers
+			usage, _ := rateLimiter.GetUsage(ctx, clientIP)
+			if usage != nil {
+				c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", usage.Limit))
+				c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", usage.Remaining))
+				c.Header("X-RateLimit-Reset", fmt.Sprintf("%d", usage.ResetTime.Unix()))
 			}
-		} else {
-			// Create new limiter for this client
-			clients[clientIP] = NewClientLimiter(rps)
+
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"success": false,
+				"error": gin.H{
+					"code":    errors.ErrRateLimit,
+					"message": "Rate limit exceeded. Please try again later.",
+				},
+			})
+			c.Abort()
+			return
+		}
+
+		// Add rate limit headers
+		usage, _ := rateLimiter.GetUsage(ctx, clientIP)
+		if usage != nil {
+			c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", usage.Limit))
+			c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", usage.Remaining))
+			c.Header("X-RateLimit-Reset", fmt.Sprintf("%d", usage.ResetTime.Unix()))
 		}
 
 		c.Next()
 	}
-}
-
-// ClientLimiter implements a simple token bucket rate limiter
-type ClientLimiter struct {
-	tokens     int
-	maxTokens  int
-	refillRate int
-	lastRefill time.Time
-}
-
-// NewClientLimiter creates a new rate limiter for a client
-func NewClientLimiter(rps int) *ClientLimiter {
-	return &ClientLimiter{
-		tokens:     rps,
-		maxTokens:  rps,
-		refillRate: rps,
-		lastRefill: time.Now(),
-	}
-}
-
-// Allow checks if a request is allowed under the rate limit
-func (cl *ClientLimiter) Allow() bool {
-	now := time.Now()
-	elapsed := now.Sub(cl.lastRefill)
-
-	// Refill tokens based on elapsed time
-	tokensToAdd := int(elapsed.Seconds()) * cl.refillRate
-	cl.tokens += tokensToAdd
-
-	if cl.tokens > cl.maxTokens {
-		cl.tokens = cl.maxTokens
-	}
-
-	cl.lastRefill = now
-
-	// Check if we have tokens available
-	if cl.tokens > 0 {
-		cl.tokens--
-		return true
-	}
-
-	return false
 }
 
 // RequestID middleware adds a unique request ID to each request

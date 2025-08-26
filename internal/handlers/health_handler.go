@@ -5,21 +5,24 @@ import (
 	"time"
 
 	"auth-service/internal/database"
+	"auth-service/pkg/redis"
 
 	"github.com/gin-gonic/gin"
 )
 
 // HealthHandler handles health check requests
 type HealthHandler struct {
-	db        *database.DB
-	startTime time.Time
+	db          *database.DB
+	redisClient *redis.Client
+	startTime   time.Time
 }
 
 // NewHealthHandler creates a new health handler
-func NewHealthHandler(db *database.DB) *HealthHandler {
+func NewHealthHandler(db *database.DB, redisClient *redis.Client) *HealthHandler {
 	return &HealthHandler{
-		db:        db,
-		startTime: time.Now(),
+		db:          db,
+		redisClient: redisClient,
+		startTime:   time.Now(),
 	}
 }
 
@@ -40,7 +43,7 @@ func (h *HealthHandler) Health(c *gin.Context) {
 	})
 }
 
-// Ready handles readiness probe requests (includes database connectivity)
+// Ready handles readiness probe requests (includes database and Redis connectivity)
 func (h *HealthHandler) Ready(c *gin.Context) {
 	status := HealthStatus{
 		Status:    "ok",
@@ -56,7 +59,20 @@ func (h *HealthHandler) Ready(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, status)
 		return
 	}
-
 	status.Checks["database"] = "ok"
+
+	// Check Redis connectivity (if Redis client is available)
+	if h.redisClient != nil {
+		if err := h.redisClient.HealthCheck(); err != nil {
+			status.Status = "error"
+			status.Checks["redis"] = "failed: " + err.Error()
+			c.JSON(http.StatusServiceUnavailable, status)
+			return
+		}
+		status.Checks["redis"] = "ok"
+	} else {
+		status.Checks["redis"] = "disabled"
+	}
+
 	c.JSON(http.StatusOK, status)
 }

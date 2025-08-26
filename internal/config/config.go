@@ -37,6 +37,12 @@ type Config struct {
 	PasswordResetExpiry time.Duration `json:"password_reset_expiry"`
 	MaxLoginAttempts    int           `json:"max_login_attempts"`
 	AccountLockDuration time.Duration `json:"account_lock_duration"`
+
+	// Redis configuration
+	RedisURL      string `json:"redis_url"`
+	RedisPassword string `json:"redis_password"`
+	RedisDB       int    `json:"redis_db"`
+	RedisEnabled  bool   `json:"redis_enabled"`
 }
 
 // Load loads configuration from environment variables
@@ -60,6 +66,10 @@ func Load() (*Config, error) {
 		PasswordResetExpiry: getDurationEnv("PASSWORD_RESET_EXPIRY", 1*time.Hour),
 		MaxLoginAttempts:    getIntEnv("MAX_LOGIN_ATTEMPTS", 5),
 		AccountLockDuration: getDurationEnv("ACCOUNT_LOCK_DURATION", 15*time.Minute),
+		RedisURL:            getEnv("REDIS_URL", "localhost:6379"),
+		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
+		RedisDB:             getIntEnv("REDIS_DB", 0),
+		RedisEnabled:        getBoolEnv("REDIS_ENABLED", true),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -93,6 +103,10 @@ func (c *Config) validate() error {
 
 	if c.BCryptCost < 10 || c.BCryptCost > 15 {
 		return fmt.Errorf("BCRYPT_COST must be between 10 and 15")
+	}
+
+	if c.RedisEnabled && c.RedisURL == "" {
+		return fmt.Errorf("REDIS_URL is required when Redis is enabled")
 	}
 
 	return nil

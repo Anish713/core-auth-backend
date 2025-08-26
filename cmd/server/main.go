@@ -15,6 +15,7 @@ import (
 	"auth-service/internal/repository"
 	"auth-service/internal/services"
 	"auth-service/pkg/cache"
+	"auth-service/pkg/email"
 	"auth-service/pkg/logger"
 	"auth-service/pkg/ratelimit"
 	"auth-service/pkg/redis"
@@ -89,8 +90,39 @@ func main() {
 	// Initialize repositories
 	userRepo := repository.NewUserRepository(db)
 
-	// Initialize services
-	authService := services.NewAuthService(userRepo, cfg.JWTSecret)
+	// Initialize email service
+	emailConfig := email.EmailConfig{
+		SMTPHost:     cfg.SMTPHost,
+		SMTPPort:     cfg.SMTPPort,
+		SMTPUsername: cfg.SMTPUsername,
+		SMTPPassword: cfg.SMTPPassword,
+		FromEmail:    cfg.FromEmail,
+		FromName:     "Auth Service",
+	}
+
+	emailService, err := email.NewEmailService(emailConfig, cfg.IsDevelopment())
+	if err != nil {
+		log.Fatal("Failed to initialize email service", "error", err)
+	}
+
+	if cfg.IsDevelopment() {
+		log.Info("Email service initialized in development mode (mock emails)")
+	} else {
+		log.Info("Email service initialized in production mode", "smtp_host", cfg.SMTPHost, "smtp_port", cfg.SMTPPort)
+	}
+
+	// Initialize services with email service
+	authServiceConfig := services.AuthServiceConfig{
+		JWTSecret:        cfg.JWTSecret,
+		AccessExpiry:     cfg.JWTAccessExpiry,
+		RefreshExpiry:    cfg.JWTRefreshExpiry,
+		BCryptCost:       cfg.BCryptCost,
+		MaxLoginAttempts: cfg.MaxLoginAttempts,
+		LockDuration:     cfg.AccountLockDuration,
+		EmailService:     emailService,
+	}
+
+	authService := services.NewAuthServiceWithConfig(userRepo, authServiceConfig)
 
 	// Initialize session manager if Redis is available
 	var sessionManager services.SessionManager

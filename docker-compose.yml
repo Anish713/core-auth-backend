@@ -46,19 +46,11 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: auth_service_app
-    environment:
-      PORT: 8080
-      ENV: development
-      DATABASE_URL: postgres://postgres:password@postgres:5432/auth_service?sslmode=disable
-      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production-make-it-at-least-32-characters-long
-      JWT_ACCESS_EXPIRY: 15m
-      JWT_REFRESH_EXPIRY: 168h
-      BCRYPT_COST: 12
-      PASSWORD_RESET_EXPIRY: 1h
-      MAX_LOGIN_ATTEMPTS: 5
-      ACCOUNT_LOCK_DURATION: 15m
-      RATE_LIMIT_ENABLED: true
-      RATE_LIMIT_RPS: 10
+    env_file:
+      - .env
+#    environment:
+#      PORT: 8080
+#      ENV: production
     ports:
       - "8080:8080"
     networks:
